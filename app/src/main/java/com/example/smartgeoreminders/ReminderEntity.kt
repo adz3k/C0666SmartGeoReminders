@@ -10,5 +10,10 @@ data class ReminderEntity(
     val notes: String,
     val radiusMeters: Int,
     val locationLabel: String,
-    val isActive: Boolean
+    val isActive: Boolean,
+
+
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val postcode: String? = null
 )

@@ -1,9 +1,11 @@
 package com.example.smartgeoreminders
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -11,28 +13,45 @@ import androidx.compose.ui.unit.dp
 fun EditReminderScreen(
     reminder: ReminderEntity,
     onBack: () -> Unit,
+    onPickLocation: () -> Unit,
+    locationLabel: String,
     onDelete: () -> Unit,
-    onSave: (ReminderEntity) -> Unit
+    onSave: (String, String, String, Boolean) -> Unit
 ) {
-    var title by remember { mutableStateOf(reminder.title) }
-    var notes by remember { mutableStateOf(reminder.notes) }
-    var radius by remember { mutableStateOf(reminder.radiusMeters.toString()) }
-    var isActive by remember { mutableStateOf(reminder.isActive) }
+    var title by remember(reminder.id) { mutableStateOf(reminder.title) }
+    var notes by remember(reminder.id) { mutableStateOf(reminder.notes) }
+    var radiusText by remember(reminder.id) { mutableStateOf(reminder.radiusMeters.toString()) }
+    var isActive by remember(reminder.id) { mutableStateOf(reminder.isActive) }
 
-    val titleError = title.isBlank()
-    val radiusError = radius.isNotBlank() && radius.toIntOrNull() == null
-    val canSave = title.isNotBlank() && !radiusError
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val radiusInt = radiusText.toIntOrNull()
+    val hasLocation = locationLabel.isNotBlank()
+    val canSave =
+        title.trim().isNotEmpty() &&
+                (radiusInt != null && radiusInt in 10..5000) &&
+                hasLocation
+
+    fun validate(): Boolean {
+        val t = title.trim()
+        val r = radiusText.toIntOrNull()
+
+        error = when {
+            t.isEmpty() -> "Title is required."
+            r == null -> "Radius must be a number."
+            r !in 10..5000 -> "Radius should be between 10 and 5000 meters."
+            !hasLocation -> "Pick a location on the map."
+            else -> null
+        }
+        return error == null
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Edit Reminder") },
-                navigationIcon = { IconButton(onClick = onBack) { Text("←") } },
-                actions = {
-                    TextButton(onClick = onDelete) {
-                        Text("Delete", color = MaterialTheme.colorScheme.error)
-                    }
-                }
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = { TextButton(onClick = onDelete) { Text("Delete") } }
             )
         }
     ) { padding ->
@@ -43,57 +62,70 @@ fun EditReminderScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Location", style = MaterialTheme.typography.labelLarge)
-            Text(reminder.locationLabel, style = MaterialTheme.typography.bodyMedium)
+            error?.let {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Text(
+                        it,
+                        modifier = Modifier.padding(12.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
 
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = { title = it; error = null },
                 label = { Text("Title *") },
-                isError = titleError,
                 modifier = Modifier.fillMaxWidth()
             )
-            if (titleError) Text("Title is required", color = MaterialTheme.colorScheme.error)
 
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
                 label = { Text("Notes") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
             )
 
             OutlinedTextField(
-                value = radius,
-                onValueChange = { radius = it },
-                label = { Text("Radius (meters)") },
-                isError = radiusError,
-                modifier = Modifier.fillMaxWidth()
+                value = radiusText,
+                onValueChange = { radiusText = it; error = null },
+                label = { Text("Radius (meters) *") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
-            if (radiusError) Text("Radius must be a number", color = MaterialTheme.colorScheme.error)
 
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Active")
                 Switch(checked = isActive, onCheckedChange = { isActive = it })
-                Spacer(Modifier.width(8.dp))
-                Text(if (isActive) "Active" else "Off")
             }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Location *", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(6.dp))
+                    Text(locationLabel)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(onClick = onPickLocation) {
+                        Text("Change location on map")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
 
             Button(
                 onClick = {
-                    val newRadius = radius.toIntOrNull() ?: reminder.radiusMeters
-                    val newLabel = "Location not set, ${newRadius}m radius"
-                    onSave(
-                        reminder.copy(
-                            title = title.trim(),
-                            notes = notes.trim(),
-                            radiusMeters = newRadius,
-                            locationLabel = newLabel,
-                            isActive = isActive
-                        )
-                    )
+                    if (validate()) onSave(title, notes, radiusText, isActive)
                 },
-                enabled = canSave,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Save Changes") }
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canSave
+            ) {
+                Text("Save Changes")
+            }
         }
     }
 }
